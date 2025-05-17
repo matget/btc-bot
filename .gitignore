@@ -1,0 +1,19 @@
+# ❌ Sensitive credentials
+btc-bot-keys.json
+
+# 🐍 Python cache
+__pycache__/
+*.pyc
+
+# 🖥️ macOS system files
+.DS_Store
+
+# 🐳 Docker build artifacts
+*.log
+*.env
+.env
+*.db
+
+# 🧪 Test artifacts
+.coverage
+pytest_cache/

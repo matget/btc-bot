@@ -1,0 +1,23 @@
+name: "Bitcoin Bot Smart"
+version: "3.3"
+changelog: "./btc_bot/CHANGELOG.md"
+slug: "btc_bot"
+description: "A Telegram bot that sends daily Bitcoin updates"
+init: false
+arch:
+  - aarch64
+  - amd64
+  - armhf
+  - armv7
+  - i386
+startup: services
+options:
+  TOKEN: "your-token-here"
+  CHAT_ID: "your-chat-id-here"
+  JSON_KEYS: "your-google-json-content"
+  GSHEET_URL: "link-to-your-google-sheet"
+schema:
+  TOKEN: password
+  CHAT_ID: str
+  JSON_KEYS: password
+  GSHEET_URL: password
