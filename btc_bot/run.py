@@ -529,7 +529,7 @@ async def main():
             await application.updater.stop()
             await application.stop()
             await application.shutdown()
-            logger.info("Bot stopped successfully")
+            logger.info("Bot stopped successfully!")
     
     except Exception as e:
         logger.error(f"❌ Bot failed to start: {e}")
