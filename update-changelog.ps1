@@ -3,6 +3,12 @@
 # Get the last commit message
 $COMMIT_MSG = git log -1 --pretty=%B
 
+# Skip if this is a changelog update commit
+if ($COMMIT_MSG -like "*Update changelog*") {
+    Write-Host "Skipping changelog update commit"
+    exit 0
+}
+
 # Get current date
 $DATE = Get-Date -Format "yyyy-MM-dd"
 
@@ -25,14 +31,31 @@ if (-not $unreleasedIndex) {
     exit 1
 }
 
-# Insert the new commit entry after the [Unreleased] section
+# Find existing Added section or create new one
+$addedIndex = $unreleasedIndex + 1
+while ($addedIndex -lt $content.Length -and -not $content[$addedIndex].StartsWith("### ")) {
+    $addedIndex++
+}
+
+# Create new content array
 $newContent = @()
-$newContent += $content[0..($unreleasedIndex)]
-$newContent += ""
+$newContent += $content[0..($unreleasedIndex)]  # Add everything up to [Unreleased]
+
+# Add a blank line after [Unreleased] if it doesn't exist
+if ($content[$unreleasedIndex + 1] -ne "") {
+    $newContent += ""
+}
+
+# Add the Added section
 $newContent += "### Added"
 $newContent += "- ${DATE} - ${COMMIT_MSG}"
-$newContent += ""
-$newContent += $content[($unreleasedIndex + 1)..($content.Length - 1)]
+
+# Add the rest of the content, skipping old Added section if it exists
+if ($addedIndex -lt $content.Length) {
+    $newContent += $content[($addedIndex + 1)..($content.Length - 1)]
+} else {
+    $newContent += ""  # Add final newline
+}
 
 # Write back to the file
 $newContent | Set-Content $CHANGELOG_FILE
