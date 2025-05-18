@@ -8,11 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- 2025-05-18 - v4.2: test5 changelog 
-
+- 2025-05-18 - Update changelog 
 
 ### Added
-- 2025-05-18 - v4.2: test5 changelog 
+- 2025-05-18 - v4.2: test5 changelog
 
 ## 1.9 – 2025-05-14
 - Added push news & reminder to update

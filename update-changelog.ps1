@@ -24,38 +24,35 @@ if (-not (Test-Path $CHANGELOG_FILE)) {
 # Read the entire file
 $content = Get-Content $CHANGELOG_FILE
 
-# Find the [Unreleased] section
-$unreleasedIndex = $content | Select-String -Pattern "## \[Unreleased\]" | Select-Object -First 1 -ExpandProperty LineNumber
-if (-not $unreleasedIndex) {
+# Find the [Unreleased] section and the first version section
+$unreleasedLine = $content | Where-Object { $_ -eq "## [Unreleased]" } | Select-Object -First 1
+$firstVersionLine = $content | Where-Object { $_ -match "^## \d" } | Select-Object -First 1
+
+if (-not $unreleasedLine) {
     Write-Error "Could not find [Unreleased] section in changelog"
     exit 1
 }
 
-# Find the next version section
-$nextVersionIndex = $unreleasedIndex + 1
-while ($nextVersionIndex -lt $content.Length) {
-    if ($content[$nextVersionIndex] -match "^## \d") {
-        break
-    }
-    $nextVersionIndex++
-}
+# Split content into three parts: header, versions, and the rest
+$headerEnd = $content.IndexOf($unreleasedLine)
+$versionsStart = $content.IndexOf($firstVersionLine)
 
-# Create new content array
+# Rebuild the file
 $newContent = @()
 
-# Add everything up to [Unreleased]
-$newContent += $content[0..($unreleasedIndex)]
+# Add header (everything before [Unreleased])
+$newContent += $content[0..($headerEnd)]
 
-# Add a blank line and the new entry
+# Add blank line
 $newContent += ""
+
+# Add new entry
 $newContent += "### Added"
 $newContent += "- ${DATE} - ${COMMIT_MSG}"
 $newContent += ""
 
-# Add everything after the next version section
-if ($nextVersionIndex -lt $content.Length) {
-    $newContent += $content[$nextVersionIndex..($content.Length - 1)]
-}
+# Add all version sections
+$newContent += $content[$versionsStart..($content.Length - 1)]
 
 # Write back to the file
 $newContent | Set-Content $CHANGELOG_FILE
