@@ -31,28 +31,29 @@ if (-not $unreleasedIndex) {
     exit 1
 }
 
-# Find existing Added section or create new one
-$addedIndex = $unreleasedIndex + 1
-while ($addedIndex -lt $content.Length -and -not $content[$addedIndex].StartsWith("### ")) {
-    $addedIndex++
-}
-
 # Create new content array
 $newContent = @()
-$newContent += $content[0..($unreleasedIndex)]  # Add everything up to [Unreleased]
 
-# Add a blank line after [Unreleased] if it doesn't exist
-if ($content[$unreleasedIndex + 1] -ne "") {
-    $newContent += ""
-}
+# Add everything up to [Unreleased]
+$newContent += $content[0..($unreleasedIndex)]
 
-# Add the Added section
+# Add a blank line after [Unreleased]
+$newContent += ""
+
+# Add the new entry
 $newContent += "### Added"
 $newContent += "- ${DATE} - ${COMMIT_MSG}"
 
-# Add the rest of the content, skipping old Added section if it exists
-if ($addedIndex -lt $content.Length) {
-    $newContent += $content[($addedIndex + 1)..($content.Length - 1)]
+# Find the next section header (starts with ##) after [Unreleased]
+$nextSectionIndex = $unreleasedIndex + 1
+while ($nextSectionIndex -lt $content.Length -and -not $content[$nextSectionIndex].StartsWith("## ")) {
+    $nextSectionIndex++
+}
+
+# Add the rest of the content starting from the next section
+if ($nextSectionIndex -lt $content.Length) {
+    $newContent += ""  # Add blank line before next section
+    $newContent += $content[$nextSectionIndex..($content.Length - 1)]
 } else {
     $newContent += ""  # Add final newline
 }

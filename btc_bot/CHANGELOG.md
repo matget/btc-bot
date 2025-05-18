@@ -8,62 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- 2025-05-18 - v4.0: test4 changelog 
-
-
-### Added
-- 2025-05-18 - v4.0: test4 changelog 
 - 2025-05-18 - Update changelog 
 
 ### Added
-- 2025-05-18 - v4: test3 changelog 
-
-
-### Added
-- 2025-05-18 - v4: test3 changelog 
-
-### Added
-- 2025-05-18 - Update changelog 
-
-### Added
-- 2025-05-18 - v3.8: test changelog 
-
-
-### Added
-- 2025-05-18 - v3.8: test changelog 
-
-### Added
-- 2025-05-18 - Update changelog 
-
-### Added
-- 2025-05-18 - Update changelog 
-
-### Added
-- 2025-05-18 - v3.8: test changelog 
-
-
-### Added
-- 2025-05-18 - v3.8: test changelog 
-
-### Added
-- 2025-05-18 - v3.8: test changelog 
-
-
-### Added
-- 2025-05-18 - v3.8: test changelog 
-
-### Added
-- 2025-05-18 - v3.7: with smart change log 
-
-### Added
-- 2025-05-18 - v3.5: fix the text box from GPT and change the reminder to 12:00 
-
-### Changed
-- Reduced logging verbosity by setting httpx logger to WARNING level to suppress polling messages
-
-### Added
-- Added automatic changelog updates through git hooks
-- Added CHANGELOG.md to track all project changes
+- 2025-05-18 - v4.0: test4 changelog
 
 ## 1.9 – 2025-05-14
 - Added push news & reminder to update
