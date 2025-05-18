@@ -1,5 +1,5 @@
 name: "Bitcoin Bot Smart2"
-version: "3.4"
+version: "3.5"
 changelog: "./btc_bot/CHANGELOG.md"
 slug: "btc_bot"
 description: "A Telegram bot that sends daily Bitcoin updates"

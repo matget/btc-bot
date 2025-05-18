@@ -291,7 +291,7 @@ async def handle_update_prompt(update: Update, context: ContextTypes.DEFAULT_TYP
         "tech_events: <score>\n"
         "adoption: <score>\n"
         "score_weighted: <final_score>\n"
-        "PLEASE! just send me test text box! without any other text/details. thanks."
+        "PLEASE! just send me test text box! without any other text/details. thanks!"
     )
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("🔗 פתח את ChatGPT", url="https://chat.openai.com/")]
