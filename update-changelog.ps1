@@ -31,31 +31,30 @@ if (-not $unreleasedIndex) {
     exit 1
 }
 
+# Find the next version section
+$nextVersionIndex = $unreleasedIndex + 1
+while ($nextVersionIndex -lt $content.Length) {
+    if ($content[$nextVersionIndex] -match "^## \d") {
+        break
+    }
+    $nextVersionIndex++
+}
+
 # Create new content array
 $newContent = @()
 
 # Add everything up to [Unreleased]
 $newContent += $content[0..($unreleasedIndex)]
 
-# Add a blank line after [Unreleased]
+# Add a blank line and the new entry
 $newContent += ""
-
-# Add the new entry
 $newContent += "### Added"
 $newContent += "- ${DATE} - ${COMMIT_MSG}"
+$newContent += ""
 
-# Find the next section header (starts with ##) after [Unreleased]
-$nextSectionIndex = $unreleasedIndex + 1
-while ($nextSectionIndex -lt $content.Length -and -not $content[$nextSectionIndex].StartsWith("## ")) {
-    $nextSectionIndex++
-}
-
-# Add the rest of the content starting from the next section
-if ($nextSectionIndex -lt $content.Length) {
-    $newContent += ""  # Add blank line before next section
-    $newContent += $content[$nextSectionIndex..($content.Length - 1)]
-} else {
-    $newContent += ""  # Add final newline
+# Add everything after the next version section
+if ($nextVersionIndex -lt $content.Length) {
+    $newContent += $content[$nextVersionIndex..($content.Length - 1)]
 }
 
 # Write back to the file
