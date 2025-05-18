@@ -282,7 +282,7 @@ async def handle_update_prompt(update: Update, context: ContextTypes.DEFAULT_TYP
         "- tech_events (Bitcoin Core upgrades, protocol changes)\n"
         "- adoption (corporate/governmental adoption, new integrations)\n\n"
         "please learn the weights of each category: supply_demand: 0.25, regulation: 0.20, macro_economy: 0.20, news_sentiment: 0.10, whales_activity: 0.10, tech_events: 0.075, adoption: 0.075\n"
-        "after that, please make text box (for east to copy) as following pattern nad replace the <score> with the values you calculated:\n\n"
+        "after that, please make text box (for easy to copy) as following pattern and replace the <score> with the values you calculated:\n\n"
         "supply_demand: <score>\n"
         "regulation: <score>\n"
         "macro_economy: <score>\n"
@@ -290,7 +290,8 @@ async def handle_update_prompt(update: Update, context: ContextTypes.DEFAULT_TYP
         "whales_activity: <score>\n"
         "tech_events: <score>\n"
         "adoption: <score>\n"
-        "score_weighted: <final_score>"
+        "score_weighted: <final_score>\n"
+        "PLEASE! just send me test text box! without any other text/details. thanks."
     )
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("🔗 פתח את ChatGPT", url="https://chat.openai.com/")]
@@ -415,8 +416,8 @@ def scheduler_thread():
                 while True:
                     current_time = datetime.now()
                     
-                    # Calculate next 10:00 AM
-                    next_reminder = current_time.replace(hour=10, minute=0, second=0, microsecond=0)
+                    # Calculate next 12:00 AM
+                    next_reminder = current_time.replace(hour=12, minute=0, second=0, microsecond=0)
                     if current_time >= next_reminder:
                         next_reminder += timedelta(days=1)
                     
@@ -443,7 +444,7 @@ def scheduler_thread():
                 raise
 
         # Start the scheduler
-        logger.info("📅 Scheduler started: initial update now, then reminder at 10:00, news every 2h")
+        logger.info("📅 Scheduler started: initial update now, then reminder at 12:00, news every 2h")
         loop.run_until_complete(run_scheduler())
     except Exception as e:
         logger.error(f"❌ Scheduler thread crashed: {e}")
