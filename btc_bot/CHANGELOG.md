@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- 2025-05-18 - v3.8: test changelog 
+
+
+### Added
+- 2025-05-18 - v3.8: test changelog 
+
+### Added
 - 2025-05-18 - v3.7: with smart change log 
 
 ### Added
