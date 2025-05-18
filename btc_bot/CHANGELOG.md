@@ -1,4 +1,22 @@
 # Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+- 2025-05-18 - v3.5: fix the text box from GPT and change the reminder to 12:00 
+
+### Changed
+- Reduced logging verbosity by setting httpx logger to WARNING level to suppress polling messages
+
+### Added
+- Added automatic changelog updates through git hooks
+- Added CHANGELOG.md to track all project changes
+
 ## 1.9 – 2025-05-14
 - Added push news & reminder to update
   
