@@ -27,6 +27,8 @@ from telegram.ext import (
 )
 import signal
 import os
+from openai import OpenAI
+
 
 # Custom filter to mask sensitive data in logs
 class SensitiveDataFilter(logging.Filter):
@@ -55,7 +57,7 @@ OPTIONS_FILE = '/data/options.json' if os.path.exists('/data') else 'options.jso
 CREDENTIALS_FILE = "/app/btc-bot-keys.json" if os.path.exists('/app') else "btc-bot-keys.json"
 
 reply_keyboard = ReplyKeyboardMarkup(
-    keyboard=[["/btc", "/csv"], ["/update", "/gptnews"], ["/history", "/help"]],
+    keyboard=[["/btc", "/csv"], ["/update", "/gpt"], ["/history", "/help"]],
     resize_keyboard=True,
     one_time_keyboard=False
 )
@@ -450,7 +452,41 @@ def scheduler_thread():
         logger.error(f"❌ Scheduler thread crashed: {e}")
         raise  # Re-raise the exception to ensure it's logged properly
 
+# ----------- GPT -----------
+async def handle_gpt_matget(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Ask ChatGPT about Matget"""
+    try:
+        # Get OpenAI key from config
+        openai_key = config.get("OPENAI_API_KEY")
+        if not openai_key:
+            await update.message.reply_text("⚠️ OpenAI API key not configured")
+            return
+
+        # Initialize OpenAI client
+        client = OpenAI(api_key=openai_key)
         
+        # Ask about Matget
+        logger.info("🤖 Asking ChatGPT about Matget...")
+        
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Do you know who is Matget? What is his full real name?"}
+            ]
+        )
+        
+        answer = response.choices[0].message.content
+        logger.info(f"ChatGPT Answer about Matget: {answer}")
+        
+        # Send the answer to user
+        await update.message.reply_text(f"🤖 About Matget:\n{answer}")
+        
+    except Exception as e:
+        error_msg = f"❌ Error: {str(e)}"
+        logger.error(error_msg)	
+        await update.message.reply_text(error_msg)
+
 # ----------- help -----------
 async def handle_help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
@@ -496,6 +532,7 @@ async def main():
         application.add_handler(CommandHandler("update", handle_update_prompt))
         application.add_handler(CommandHandler("help", handle_help_command))
         application.add_handler(CommandHandler("history", handle_history))
+        application.add_handler(CommandHandler("gpt", handle_gpt_matget))
         application.add_handler(csv_conv_handler)
         
         logger.info(f"{now}: 📡 Bot is listening...")
