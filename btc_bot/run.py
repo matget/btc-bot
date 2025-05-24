@@ -2,10 +2,8 @@ import asyncio
 import json
 import re
 import threading
-import time
 from datetime import datetime, timedelta
 import requests
-import schedule
 import gspread
 import logging
 import matplotlib.pyplot as plt
@@ -76,11 +74,12 @@ def load_config():
                 "TOKEN": os.getenv("TOKEN"),
                 "CHAT_ID": os.getenv("CHAT_ID"),
                 "GSHEET_URL": os.getenv("GSHEET_URL"),
-                "JSON_KEYS": os.getenv("JSON_KEYS")
+                "JSON_KEYS": os.getenv("JSON_KEYS"),
+                "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY")
             }
         
         # Validate required fields
-        required_fields = ["TOKEN", "CHAT_ID", "GSHEET_URL", "JSON_KEYS"]
+        required_fields = ["TOKEN", "CHAT_ID", "GSHEET_URL", "JSON_KEYS", "OPENAI_API_KEY"]
         missing_fields = [field for field in required_fields if not options.get(field)]
         if missing_fields:
             raise ValueError(f"Missing required fields: {', '.join(missing_fields)}")
@@ -117,6 +116,7 @@ config = load_config()
 TOKEN = config["TOKEN"]
 CHAT_ID = config["CHAT_ID"]
 GSHEET_URL = config["GSHEET_URL"]
+OPENAI_API_KEY = config["OPENAI_API_KEY"]
 
 # Setup Google Sheets
 sheet = setup_google_sheets(config["JSON_KEYS"], GSHEET_URL)
@@ -151,9 +151,15 @@ hebrew_labels = {
 }
 
 def get_btc_price():
-    url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
-    response = requests.get(url).json()
-    return response['bitcoin']['usd']
+    """Get current Bitcoin price from CoinGecko API"""
+    url = "https://api.coingecko.com/api/v3/simple/price"
+    params = {
+        "ids": "bitcoin",
+        "vs_currencies": "usd"
+    }
+    response = requests.get(url, params=params)
+    data = response.json()
+    return data["bitcoin"]["usd"]
 
 def interpret_score(score):
     if score >= 8:
@@ -167,16 +173,6 @@ def interpret_score(score):
     else:
         return "🔻 תחזית שלילית מאוד – סיכון מוגבר ונטייה לירידות."
 
-def get_btc_price():
-    url = "https://api.coingecko.com/api/v3/simple/price"
-    params = {
-        "ids": "bitcoin",
-        "vs_currencies": "usd"
-    }
-    response = requests.get(url, params=params)
-    data = response.json()
-    return data["bitcoin"]["usd"]
-    
 def generate_history_plot():
     dates, prices, scores = [], [], []
     try:
