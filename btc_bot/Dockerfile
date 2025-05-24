@@ -5,7 +5,8 @@ WORKDIR /app
 # Copy project files
 COPY run.py .
 COPY requirements.txt .
-COPY config.yaml /data/options.json
+COPY config.yaml /data/config.yaml
+COPY options.json /data/options.json
 
 # Install system packages
 RUN apt-get update && apt-get install -y \
