@@ -20,6 +20,14 @@ RUN apt-get update && apt-get install -y \
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
+ENV TOKEN="" \
+    CHAT_ID="" \
+    JSON_KEYS="" \
+    GSHEET_URL="" \
+    OPENAI_API_KEY="" \
+    BINANCE_API_KEY="" \
+    BINANCE_API_SECRET=""
+
 # Copy and prepare the run script
 COPY run.sh /app/
 RUN chmod +x /app/run.sh && \
