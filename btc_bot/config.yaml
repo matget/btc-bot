@@ -1,5 +1,5 @@
 name: "Bitcoin Bot Smart2"
-version: "4.4"
+version: "4.5"
 changelog: "./btc_bot/CHANGELOG.md"
 slug: "btc_bot"
 description: "A Telegram bot that sends daily Bitcoin updates"
@@ -14,12 +14,16 @@ startup: services
 options:
   TOKEN: "your-token-here"
   CHAT_ID: "your-chat-id-here"
-  JSON_KEYS: "your-google-json-content"
   GSHEET_URL: "link-to-your-google-sheet"
+  JSON_KEYS: "your-google-json-content"
   OPENAI_API_KEY: "your-openai-api-key"
+  BINANCE_API_KEY: "your-binance-api-key"
+  BINANCE_API_SECRET: "your-binance-api-secret"
 schema:
   TOKEN: password
   CHAT_ID: str
-  JSON_KEYS: password
   GSHEET_URL: password
+  JSON_KEYS: password
   OPENAI_API_KEY: password
+  BINANCE_API_KEY: password
+  BINANCE_API_SECRET: password
