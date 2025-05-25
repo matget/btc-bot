@@ -26,6 +26,9 @@ from telegram.ext import (
 import signal
 import os
 from openai import OpenAI
+from binance.client import Client
+from binance.exceptions import BinanceAPIException
+import time
 
 
 # Custom filter to mask sensitive data in logs
@@ -55,7 +58,7 @@ OPTIONS_FILE = '/data/options.json' if os.path.exists('/data') else 'options.jso
 CREDENTIALS_FILE = "/app/btc-bot-keys.json" if os.path.exists('/app') else "btc-bot-keys.json"
 
 reply_keyboard = ReplyKeyboardMarkup(
-    keyboard=[["/btc", "/csv"], ["/update", "/gpt"], ["/history", "/help"]],
+    keyboard=[["/btc", "/gpt"], ["/price"], ["/trade", "/balance"], ["/history", "/help"]],
     resize_keyboard=True,
     one_time_keyboard=False
 )
@@ -75,11 +78,13 @@ def load_config():
                 "CHAT_ID": os.getenv("CHAT_ID"),
                 "GSHEET_URL": os.getenv("GSHEET_URL"),
                 "JSON_KEYS": os.getenv("JSON_KEYS"),
-                "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY")
+                "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
+                "BINANCE_API_KEY": os.getenv("BINANCE_API_KEY"),
+                "BINANCE_API_SECRET": os.getenv("BINANCE_API_SECRET")
             }
         
         # Validate required fields
-        required_fields = ["TOKEN", "CHAT_ID", "GSHEET_URL", "JSON_KEYS", "OPENAI_API_KEY"]
+        required_fields = ["TOKEN", "CHAT_ID", "GSHEET_URL", "JSON_KEYS", "OPENAI_API_KEY", "BINANCE_API_KEY", "BINANCE_API_SECRET"]
         missing_fields = [field for field in required_fields if not options.get(field)]
         if missing_fields:
             raise ValueError(f"Missing required fields: {', '.join(missing_fields)}")
@@ -117,6 +122,8 @@ TOKEN = config["TOKEN"]
 CHAT_ID = config["CHAT_ID"]
 GSHEET_URL = config["GSHEET_URL"]
 OPENAI_API_KEY = config["OPENAI_API_KEY"]
+BINANCE_API_KEY = config["BINANCE_API_KEY"]
+BINANCE_API_SECRET = config["BINANCE_API_SECRET"]
 
 # Setup Google Sheets
 sheet = setup_google_sheets(config["JSON_KEYS"], GSHEET_URL)
@@ -125,7 +132,32 @@ sheet = setup_google_sheets(config["JSON_KEYS"], GSHEET_URL)
 logger.addFilter(SensitiveDataFilter([TOKEN]))
 
 GSHEET_CREDENTIALS = CREDENTIALS_FILE
-CSV_WAITING = 1
+
+def get_binance_client():
+    """Initialize and return a Binance client"""
+    try:
+        # Initialize client with production environment
+        client = Client(
+            api_key=BINANCE_API_KEY,
+            api_secret=BINANCE_API_SECRET
+        )
+        client.RECV_WINDOW = 60000  # 60 second window for requests
+        
+        # Get server time and calculate offset
+        server_time = client.get_server_time()
+        local_time = int(time.time() * 1000)
+        client.timestamp_offset = server_time['serverTime'] - local_time
+        logger.info(f"Binance time offset: {client.timestamp_offset}ms")
+        
+        # Test connection with account info
+        client.get_account()
+        logger.info("Successfully connected to Binance")
+        return client
+            
+    except Exception as e:
+        error_msg = f"Failed to initialize Binance client: {str(e)}"
+        logger.error(error_msg)
+        raise Exception(error_msg)
 
 def get_all_rows():
     return sheet.get_all_records()
@@ -221,15 +253,15 @@ async def handle_btc_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await send_update_to(update.effective_chat.id)
 async def send_update_to(chat_id):
     try:
-        rows = get_all_rows()  # קריאה מהגיליון במקום CSV
+        rows = get_all_rows()
         if not rows:
             await bot.send_message(chat_id=chat_id, text="⚠️ אין נתונים בגיליון Google Sheets.")
             return
-        last = rows[-1]  # השורה האחרונה
+        last = rows[-1]
     except Exception as e:
         await bot.send_message(chat_id=chat_id, text=f"⚠️ שגיאה בגישה ל-Google Sheets: {e}")
         return
-    # חילוץ נתונים
+
     now = last.get("Date", "לא ידוע")
     try:
         price = float(str(last["Price"]).replace(',', '').strip())
@@ -248,7 +280,7 @@ async def send_update_to(chat_id):
             categories[k] = float(str(last.get(k, 0)).strip())
         except:
             categories[k] = 0
-    # ניסוח הודעה
+
     message = f"*עדכון ביטקוין יומי* - {now}\n\n"
     message += f"*מחיר נוכחי:* ${price:,.0f}\n"
     message += f"*ציון השפעה משוקלל:* {score}/10\n\n"
@@ -257,7 +289,7 @@ async def send_update_to(chat_id):
         message += f"- {hebrew}: {v}/10\n"
     summary = interpret_score(score)
     message += f"\n\n*סיכום:* {summary}"
-    # גרף היסטוריה
+
     generate_history_plot()
     await bot.send_message(chat_id=chat_id, text=message, parse_mode='Markdown')
     try:
@@ -265,81 +297,6 @@ async def send_update_to(chat_id):
             await bot.send_photo(chat_id=chat_id, photo=f)
     except FileNotFoundError:
         await bot.send_message(chat_id=chat_id, text="⚠️ לא ניתן להציג גרף (btc_update.png לא נמצא)")
-
-# ----------- update -----------
-async def handle_update_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    prompt = (
-        "Please analyze the current global situation of Bitcoin and rate the following 7 categories on a scale of 1 to 10,\n"
-        "based on their current influence on the Bitcoin price **today**:\n\n"
-        "Categories:\n"
-        "- supply_demand (supply, demand, trading volume, exchange inflows)\n"
-        "- regulation (new regulations, government or institutional policy changes)\n"
-        "- macro_economy (interest rates, inflation, Fed decisions, economic news)\n"
-        "- news_sentiment (media/public mood, Twitter trends, Google Trends)\n"
-        "- whales_activity (large BTC wallet movements)\n"
-        "- tech_events (Bitcoin Core upgrades, protocol changes)\n"
-        "- adoption (corporate/governmental adoption, new integrations)\n\n"
-        "please learn the weights of each category: supply_demand: 0.25, regulation: 0.20, macro_economy: 0.20, news_sentiment: 0.10, whales_activity: 0.10, tech_events: 0.075, adoption: 0.075\n"
-        "after that, please make text box (for easy to copy) as following pattern and replace the <score> with the values you calculated:\n\n"
-        "supply_demand: <score>\n"
-        "regulation: <score>\n"
-        "macro_economy: <score>\n"
-        "news_sentiment: <score>\n"
-        "whales_activity: <score>\n"
-        "tech_events: <score>\n"
-        "adoption: <score>\n"
-        "score_weighted: <final_score>\n"
-        "PLEASE! just send me test text box! without any other text/details. thanks!"
-    )
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔗 פתח את ChatGPT", url="https://chat.openai.com/")]
-    ])
-    await update.message.reply_text(
-        text=f"{prompt}",
-        reply_markup=keyboard
-    )
-
-# ----------- csv -----------
-async def start_csv(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📝 Please paste the GPT output in the expected format (category scores + score_weighted):")
-    return CSV_WAITING
-async def receive_csv_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
-    pattern = r"(supply_demand|regulation|macro_economy|news_sentiment|whales_activity|tech_events|adoption|score_weighted):\s*([\d.]+)"
-    matches = re.findall(pattern, text)
-    if len(matches) < 8:
-        await update.message.reply_text("❌ Missing fields. Please make sure all 7 categories and score_weighted are included.")
-        return ConversationHandler.END
-    try:
-        scores = {key: float(value) for key, value in matches}
-    except ValueError:
-        await update.message.reply_text("⚠️ All values must be numeric.")
-        return ConversationHandler.END
-    now = datetime.now().strftime("%d/%m/%Y %H:%M")
-    price = get_btc_price()
-    row = {
-        "Date": now,
-        "Price": price,
-        "Score": scores["score_weighted"],
-        "supply_demand": scores["supply_demand"],
-        "regulation": scores["regulation"],
-        "macro_economy": scores["macro_economy"],
-        "news_sentiment": scores["news_sentiment"],
-        "whales_activity": scores["whales_activity"],
-        "tech_events": scores["tech_events"],
-        "adoption": scores["adoption"]
-    }
-    try:
-        append_row_to_sheet(row)  # כתיבה לגוגל שיטס במקום לקובץ
-        await update.message.reply_text("✅ הנתונים נרשמו בהצלחה בגיליון!")
-    except Exception as e:
-        await update.message.reply_text(f"❌ שגיאה בשמירה ל-Google Sheets:\n{e}")
-    return ConversationHandler.END
-csv_conv_handler = ConversationHandler(
-    entry_points=[CommandHandler("csv", start_csv)],
-    states={CSV_WAITING: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_csv_data)]},
-    fallbacks=[],
-)
 
 # ----------- history -----------
 async def handle_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -371,116 +328,146 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_keyboard
     )
 
-# ----------- reminder -----------
-async def push_reminder(chat_id):
-    logger.info("🟢 [push_reminder] Started")
-    try:
-        await bot.send_message(chat_id=chat_id, text="🕘 Reminder: Don't forget to update today's Bitcoin data using /update → GPT → /csv")
-        logger.info("✅ [push_reminder] Sent to Telegram")
-    except Exception as e:
-        logger.error(f"❌ [push_reminder] FAILED: {e}")
-
 # ----------- Push News -----------
-
 async def push_news(chat_id):
-    logger.info("🟢 [push_news] Started")
     try:
         price = get_btc_price()
-        logger.info(f"📈 BTC price: {price}")
         await bot.send_message(chat_id=chat_id, text=f"Current BTC Value: ${price:,.2f}")
-        logger.info("✅ [push_news] Sent to Telegram")
     except Exception as e:
         logger.error(f"❌ [push_news] FAILED: {e}")
 
-def scheduler_thread():
+def thread_target():
+    """Target function for the scheduler thread"""
     try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-        async def send_news():
-            logger.info("📤 Sending scheduled BTC update")
-            await push_news(CHAT_ID)
-
-        async def send_reminder():
-            logger.info("🔔 Sending daily reminder")
-            await push_reminder(CHAT_ID)
-
-        async def run_scheduler():
-            try:
-                # Send first update immediately on startup
-                logger.info("🚀 Sending initial update on startup")
-                await send_news()
-                
-                while True:
-                    current_time = datetime.now()
-                    
-                    # Calculate next 12:00 AM
-                    next_reminder = current_time.replace(hour=12, minute=0, second=0, microsecond=0)
-                    if current_time >= next_reminder:
-                        next_reminder += timedelta(days=1)
-                    
-                    # Calculate next 2-hour interval
-                    hours_since_midnight = current_time.hour + current_time.minute / 60
-                    hours_until_next = 2 - (hours_since_midnight % 2)
-                    next_update = current_time + timedelta(hours=hours_until_next)
-                    next_update = next_update.replace(minute=0, second=0, microsecond=0)
-                    
-                    # Determine which event is next
-                    time_to_reminder = (next_reminder - current_time).total_seconds()
-                    time_to_update = (next_update - current_time).total_seconds()
-                    
-                    if time_to_update <= time_to_reminder:
-                        # Wait until next update time
-                        await asyncio.sleep(time_to_update)
-                        await send_news()
-                    else:
-                        # Wait until reminder time
-                        await asyncio.sleep(time_to_reminder)
-                        await send_reminder()
-            except Exception as e:
-                logger.error(f"❌ Scheduler loop failed: {e}")
-                raise
-
-        # Start the scheduler
-        logger.info("📅 Scheduler started: initial update now, then reminder at 12:00, news every 2h")
-        loop.run_until_complete(run_scheduler())
+        logger.info("Starting scheduler thread")
+        asyncio.run(run_scheduler())
     except Exception as e:
-        logger.error(f"❌ Scheduler thread crashed: {e}")
-        raise  # Re-raise the exception to ensure it's logged properly
+        logger.error(f"Scheduler thread crashed: {e}")
+
+def scheduler_thread():
+    """Start the scheduler in a separate thread"""
+    thread = threading.Thread(target=thread_target, daemon=True)
+    thread.start()
+    return thread
+
+async def run_scheduler():
+    """Main scheduler loop"""
+    logger.info("Starting GPT analysis scheduler")
+    try:
+        # Initial run
+        await send_gpt_analysis()
+        
+        while True:
+            try:
+                current_time = datetime.now()
+                
+                # Calculate next 12-hour interval for GPT analysis
+                hours_since_midnight = current_time.hour + current_time.minute / 60
+                hours_until_next_gpt = 12 - (hours_since_midnight % 12)
+                next_gpt_update = current_time + timedelta(hours=hours_until_next_gpt)
+                next_gpt_update = next_gpt_update.replace(minute=0, second=0, microsecond=0)
+                
+                # Calculate wait time
+                wait_time = (next_gpt_update - current_time).total_seconds()
+                logger.info(f"Next GPT analysis scheduled for {next_gpt_update}")
+                
+                await asyncio.sleep(wait_time)
+                await send_gpt_analysis()
+                
+            except Exception as e:
+                logger.error(f"Error in scheduler loop: {e}")
+                # Wait a bit before retrying
+                await asyncio.sleep(60)
+                
+    except Exception as e:
+        logger.error(f"Fatal error in scheduler: {e}")
+        raise
+
+async def send_gpt_analysis():
+    """Run GPT analysis and send results"""
+    logger.info("🤖 Running scheduled GPT analysis")
+    try:
+        # Create a mock update object for handle_gpt_matget
+        class MockMessage:
+            async def reply_text(self, text, **kwargs):
+                await bot.send_message(chat_id=CHAT_ID, text=text, **kwargs)
+        
+        class MockUpdate:
+            def __init__(self):
+                self.message = MockMessage()
+                self.effective_chat = type('obj', (object,), {'id': CHAT_ID})
+        
+        mock_update = MockUpdate()
+        await handle_gpt_matget(mock_update, None)
+    except Exception as e:
+        logger.error(f"Failed to run scheduled GPT analysis: {e}")
+        raise
 
 # ----------- GPT -----------
 async def handle_gpt_matget(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Ask ChatGPT about Matget"""
     try:
-        # Get OpenAI key from config
         openai_key = config.get("OPENAI_API_KEY")
         if not openai_key:
             await update.message.reply_text("⚠️ OpenAI API key not configured")
             return
 
-        # Initialize OpenAI client
         client = OpenAI(api_key=openai_key)
-        
-        # Ask about Matget
-        logger.info("🤖 Asking ChatGPT about Matget...")
         
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": "Do you know who is Matget? What is his full real name?"}
+                {"role": "system", "content": "You are a Bitcoin market analyst."},
+                {"role": "user", "content": "Rate Bitcoin's current market factors (1-10):\n- supply_demand (0.25): volume, inflows\n- regulation (0.20): policy changes\n- macro_economy (0.20): rates, inflation\n- news_sentiment (0.10): media mood\n- whales_activity (0.10): large moves\n- tech_events (0.075): upgrades\n- adoption (0.075): institutional\n\nRespond only in format:\nsupply_demand: X\nregulation: X\nmacro_economy: X\nnews_sentiment: X\nwhales_activity: X\ntech_events: X\nadoption: X\nscore_weighted: X"}
             ]
         )
         
         answer = response.choices[0].message.content
-        logger.info(f"ChatGPT Answer about Matget: {answer}")
+        await update.message.reply_text(f"🤖 Analysis:\n{answer}")
         
-        # Send the answer to user
-        await update.message.reply_text(f"🤖 About Matget:\n{answer}")
+        # Parse GPT's response and save to Google Sheets
+        pattern = r"(supply_demand|regulation|macro_economy|news_sentiment|whales_activity|tech_events|adoption|score_weighted):\s*([\d.]+)"
+        matches = re.findall(pattern, answer)
+        if len(matches) < 8:
+            await update.message.reply_text("❌ GPT response missing fields. Data not saved.")
+            return
+
+        scores = {key: float(value) for key, value in matches}
+        now = datetime.now().strftime("%d/%m/%Y %H:%M")
+        price = get_btc_price()
+        
+        row = {
+            "Date": now,
+            "Price": price,
+            "Score": scores["score_weighted"],
+            "supply_demand": scores["supply_demand"],
+            "regulation": scores["regulation"],
+            "macro_economy": scores["macro_economy"],
+            "news_sentiment": scores["news_sentiment"],
+            "whales_activity": scores["whales_activity"],
+            "tech_events": scores["tech_events"],
+            "adoption": scores["adoption"]
+        }
+        
+        try:
+            append_row_to_sheet(row)
+            await update.message.reply_text("✅ Analysis saved to Google Sheets successfully!")
+        except Exception as e:
+            await update.message.reply_text(f"❌ Error saving to Google Sheets:\n{e}")
         
     except Exception as e:
         error_msg = f"❌ Error: {str(e)}"
         logger.error(error_msg)	
+        await update.message.reply_text(error_msg)
+
+# ----------- price -----------
+async def handle_price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler for manual price check command"""
+    try:
+        price = get_btc_price()
+        await update.message.reply_text(f"💰 Current BTC Price: ${price:,.2f}")
+    except Exception as e:
+        error_msg = f"❌ Error getting BTC price: {str(e)}"
+        logger.error(error_msg)
         await update.message.reply_text(error_msg)
 
 # ----------- help -----------
@@ -489,13 +476,12 @@ async def handle_help_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         "🤖 *Bitcoin GPT Bot – Commands Overview*\n\n"
         "Available commands:\n"
         "/btc – BTC Status.\n"
-        "/update – Get GPT prompt for scores.\n"
-        "/csv – Update CSV file.\n"
-        "/gptnews – GPT prompt for BTC news\n"
+        "/gpt – Get GPT analysis.\n"
+        "/price – Get current BTC price.\n"
+        "/trade – Test Binance connection.\n"
+        "/balance – Check your balances.\n"
         "/history – Present full csv.\n"
         "/help – Show this help message.\n\n"
-        "You should do the following on daily basis:\n"
-        "/update → copy to GPT → copy from GPT → /csv → paste\n\n"
         "Good luck and enjoy the data! 🚀"
     )
     await update.message.reply_text(help_text, reply_markup=reply_keyboard)
@@ -506,7 +492,7 @@ async def main():
     logger.info(f"{now}: Main On")
     
     # Start scheduler in a separate thread
-    scheduler = threading.Thread(target=scheduler_thread, daemon=True)
+    scheduler = threading.Thread(target=run_scheduler, daemon=True)
     scheduler.start()
     
     # Start bot listener
@@ -525,12 +511,12 @@ async def main():
         # Add handlers
         application.add_handler(CommandHandler("start", handle_start))
         application.add_handler(CommandHandler("btc", handle_btc_command))
-        application.add_handler(CommandHandler("update", handle_update_prompt))
         application.add_handler(CommandHandler("help", handle_help_command))
         application.add_handler(CommandHandler("history", handle_history))
         application.add_handler(CommandHandler("gpt", handle_gpt_matget))
-        application.add_handler(csv_conv_handler)
-        
+        application.add_handler(CommandHandler("price", handle_price_command))
+        application.add_handler(CommandHandler("trade", handle_trade_command))
+        application.add_handler(CommandHandler("balance", handle_balance_command))
         logger.info(f"{now}: 📡 Bot is listening...")
         
         # Start the bot
@@ -567,6 +553,106 @@ async def main():
     except Exception as e:
         logger.error(f"❌ Bot failed to start: {e}")
         raise
+
+# Add new functions before main()
+async def handle_trade_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler for testing Binance connection and basic functions"""
+    try:
+        # Initialize Binance client
+        binance_client = get_binance_client()
+        
+        # Get server time
+        time_res = binance_client.get_server_time()
+        server_time = time_res['serverTime']
+        
+        # Prepare params with timestamp
+        params = {}
+        if hasattr(binance_client, 'timestamp_offset'):
+            params['timestamp'] = int(time.time() * 1000 + binance_client.timestamp_offset)
+        
+        # Get account info
+        account = binance_client.get_account(**params)
+        btc_balance = next((asset for asset in account['balances'] 
+                          if asset['asset'] == 'BTC'), {'free': '0.0'})
+        usdt_balance = next((asset for asset in account['balances'] 
+                           if asset['asset'] == 'USDT'), {'free': '0.0'})
+        
+        # Get current price (no timestamp needed for public endpoints)
+        btc_price = float(binance_client.get_symbol_ticker(symbol="BTCUSDT")['price'])
+        
+        # Create response message
+        message = (
+            "🔄 Binance Connection Test:\n\n"
+            f"Server Time: {datetime.fromtimestamp(server_time/1000)}\n"
+            f"Time Offset: {binance_client.timestamp_offset}ms\n"
+            f"BTC Price: ${btc_price:,.2f}\n"
+            f"BTC Balance: {float(btc_balance['free']):.8f}\n"
+            f"USDT Balance: ${float(usdt_balance['free']):.2f}\n\n"
+            "✅ Connection successful!"
+        )
+        
+        await update.message.reply_text(message)
+        
+    except BinanceAPIException as e:
+        error_msg = f"❌ Binance API Error: {str(e)}"
+        logger.error(error_msg)
+        await update.message.reply_text(error_msg)
+    except Exception as e:
+        error_msg = f"❌ Error: {str(e)}"
+        logger.error(error_msg)
+        await update.message.reply_text(error_msg)
+
+async def handle_balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler for checking account balance"""
+    try:
+        await update.message.reply_text("🔄 Checking your Binance balance...")
+        
+        # Get client instance
+        client = get_binance_client()
+        
+        # Get account info with proper timestamp
+        account = client.get_account()
+        
+        # Filter non-zero balances
+        balances = [asset for asset in account['balances'] 
+                   if float(asset['free']) > 0 or float(asset['locked']) > 0]
+        
+        if not balances:
+            await update.message.reply_text("No assets found with non-zero balance.")
+            return
+            
+        # Sort balances by value (USDT equivalent)
+        message = "💰 Your Balances:\n\n"
+        
+        # First show stablecoins
+        stablecoins = ['USDT', 'BUSD', 'USDC']
+        for asset in balances:
+            if asset['asset'] in stablecoins:
+                free = float(asset['free'])
+                locked = float(asset['locked'])
+                message += f"{asset['asset']}: ${free:.2f} (Locked: ${locked:.2f})\n"
+        
+        # Then show other assets
+        for asset in balances:
+            if asset['asset'] not in stablecoins:
+                free = float(asset['free'])
+                locked = float(asset['locked'])
+                
+                # Try to get current price in USDT
+                try:
+                    ticker = client.get_symbol_ticker(symbol=f"{asset['asset']}USDT")
+                    price = float(ticker['price'])
+                    value = free * price
+                    message += f"{asset['asset']}: {free:.8f} ≈ ${value:.2f} (Locked: {locked:.8f})\n"
+                except:
+                    message += f"{asset['asset']}: {free:.8f} (Locked: {locked:.8f})\n"
+        
+        await update.message.reply_text(message)
+        
+    except Exception as e:
+        error_msg = f"❌ Error getting balance: {str(e)}"
+        logger.error(error_msg)
+        await update.message.reply_text(error_msg)
 
 if __name__ == "__main__":
     try:
