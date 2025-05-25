@@ -26,11 +26,5 @@ RUN chmod +x /app/run.sh && \
     sed -i 's/\r$//' /app/run.sh && \
     mkdir -p /data
 
-# Environment variables for configuration
-ENV TOKEN="your-token-here" \
-    CHAT_ID="your-chat-id-here" \
-    JSON_KEYS="your-google-json-content" \
-    GSHEET_URL="link-to-your-google-sheet"
-
 # Set entrypoint
 CMD ["/app/run.sh"]
