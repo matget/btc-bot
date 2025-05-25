@@ -9,9 +9,11 @@ import json
 config = {
     "TOKEN": os.environ.get("TOKEN"),
     "CHAT_ID": os.environ.get("CHAT_ID"),
-    "JSON_KEYS": json.loads(os.environ.get("JSON_KEYS", "{}")),
     "GSHEET_URL": os.environ.get("GSHEET_URL"),
-    "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY")
+    "JSON_KEYS": json.loads(os.environ.get("JSON_KEYS", "{}")),
+    "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY"),
+    "BINANCE_API_KEY": os.environ.get("BINANCE_API_KEY"),
+    "BINANCE_API_SECRET": os.environ.get("BINANCE_API_SECRET")
 }
 
 with open("/data/options.json", "w") as f:
