@@ -186,8 +186,13 @@ def generate_signal(final_score, technical_score):
 def update_sheets(row_dict):
     """Update both RAW and GUI worksheets with appropriate data"""
     try:
+        # Setup Google Sheets client
+        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+        creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
+        sheets_client = gspread.authorize(creds)
+        
         # First update RAW sheet with all data
-        raw_sheet = client.open_by_url(GSHEET_URL).worksheet("RAW")
+        raw_sheet = sheets_client.open_by_url(GSHEET_URL).worksheet("RAW")
         
         # Define RAW sheet columns
         raw_columns = [
@@ -221,7 +226,7 @@ def update_sheets(row_dict):
         logger.info("Successfully updated RAW sheet")
         
         # Now update GUI sheet with selected columns
-        gui_sheet = client.open_by_url(GSHEET_URL).worksheet("GUI")
+        gui_sheet = sheets_client.open_by_url(GSHEET_URL).worksheet("GUI")
         
         # Define GUI sheet columns
         gui_columns = [
