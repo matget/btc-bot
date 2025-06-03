@@ -2,8 +2,13 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Set timezone
+ENV TZ=Asia/Jerusalem
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
 # Copy project files
 COPY run.py .
+COPY crypto_utils.py .
 COPY requirements.txt .
 COPY config.yaml /data/config.yaml
 COPY options.json /data/options.json
@@ -13,7 +18,8 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     libfreetype6-dev \
     libpng-dev \
-    libjpeg-dev && \
+    libjpeg-dev \
+    tzdata && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
