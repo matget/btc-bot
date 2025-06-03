@@ -418,26 +418,37 @@ def initialize_trade_status():
         
         # If we have history, use the last row for all our state
         if all_rows:
-            # Sort rows by date to ensure we get the actual last row
-            sorted_rows = sorted(all_rows, 
-                key=lambda x: datetime.strptime(x.get('Date', '01/01/2000 00:00'), "%d/%m/%Y %H:%M"), 
-                reverse=True
-            )
-            last_row = sorted_rows[0]  # Get the most recent row
-            
-            # Update global last_processed_row
-            global last_processed_row
-            last_processed_row = (
-                last_row.get('Date', ''),
-                last_row.get('Price', ''),
-                last_row.get('action', '')
-            )
-            
-            # Get balance, ensuring we handle any formatting issues
-            try:
-                current_balance = float(str(last_row.get('balance', '0')).replace(',', ''))
-            except (ValueError, TypeError):
-                logger.warning("Invalid balance value in sheet, getting from Binance")
+            # Filter out rows with empty dates and sort by date
+            valid_rows = [row for row in all_rows if row.get('Date', '').strip()]
+            if valid_rows:
+                try:
+                    # Sort rows by date to ensure we get the actual last row
+                    sorted_rows = sorted(
+                        valid_rows,
+                        key=lambda x: datetime.strptime(x.get('Date'), "%d/%m/%Y %H:%M"),
+                        reverse=True
+                    )
+                    last_row = sorted_rows[0]  # Get the most recent row
+                    
+                    # Update global last_processed_row
+                    global last_processed_row
+                    last_processed_row = (
+                        last_row.get('Date', ''),
+                        last_row.get('Price', ''),
+                        last_row.get('action', '')
+                    )
+                    
+                    # Get balance, ensuring we handle any formatting issues
+                    try:
+                        current_balance = float(str(last_row.get('balance', '0')).replace(',', ''))
+                    except (ValueError, TypeError):
+                        logger.warning("Invalid balance value in sheet, getting from Binance")
+                        current_balance = get_binance_usdt_balance()
+                except Exception as e:
+                    logger.warning(f"Error processing dates: {e}, using Binance balance")
+                    current_balance = get_binance_usdt_balance()
+            else:
+                logger.warning("No valid dated rows found, using Binance balance")
                 current_balance = get_binance_usdt_balance()
             
             # Count active trades
@@ -453,7 +464,10 @@ def initialize_trade_status():
                 
     except Exception as e:
         logger.error(f"Error initializing trade status: {e}")
-        return 0, get_binance_usdt_balance()
+        # On error, get fresh balance from Binance
+        current_balance = get_binance_usdt_balance()
+        logger.warning(f"Using Binance balance after error: ${current_balance:.1f}")
+        return 0, current_balance
 
 async def handle_gpt_matget(update: Update, context: ContextTypes.DEFAULT_TYPE, force_upload=False, is_profit_sell=False, specific_buy_price=None, is_gpt_update=False, is_technical_check=False, last_gpt_scores=None):
     global last_processed_row
@@ -744,9 +758,21 @@ async def handle_gpt_matget(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 
             # For HOLD actions, maintain the last known balance
             if trading_action == "⚖️ HOLD" and all_rows:
-                last_row = all_rows[-1]
-                current_balance = float(str(last_row.get('balance', current_balance)).replace(',', ''))
-                logger.info(f"HOLD action - Maintaining last known balance: ${current_balance:.1f}")
+                # Sort rows by date in descending order, handling empty dates
+                try:
+                    sorted_rows = sorted(
+                        [row for row in all_rows if row.get('Date', '').strip()],  # Filter out rows with empty dates
+                        key=lambda x: datetime.strptime(x.get('Date', '01/01/2000 00:00'), "%d/%m/%Y %H:%M"),
+                        reverse=True
+                    )
+                    if sorted_rows:
+                        last_row = sorted_rows[0]  # Get the most recent row
+                        current_balance = float(str(last_row.get('balance', current_balance)).replace(',', ''))
+                        logger.info(f"HOLD action - Maintaining last known balance: ${current_balance:.1f} from {last_row.get('Date')}")
+                    else:
+                        logger.warning("No valid dated rows found, using current balance")
+                except Exception as e:
+                    logger.warning(f"Error sorting rows by date: {e}, using current balance")
 
             # Prepare row data with the calculated GPT score
             row = {
@@ -1175,15 +1201,27 @@ async def initialize_bot_state():
         all_rows = sheet.get_all_records()
         if all_rows:
             # Get balance and active trades from last row
-            sorted_rows = sorted(all_rows, 
-                key=lambda x: datetime.strptime(x.get('Date', '01/01/2000 00:00'), "%d/%m/%Y %H:%M"), 
-                reverse=True
-            )
-            last_row = sorted_rows[0]
             try:
-                current_balance = float(str(last_row.get('balance', '0')).replace(',', ''))
-            except (ValueError, TypeError):
+                # Sort rows by date in descending order, handling empty dates
+                valid_rows = [row for row in all_rows if row.get('Date', '').strip()]
+                if valid_rows:
+                    sorted_rows = sorted(
+                        valid_rows,
+                        key=lambda x: datetime.strptime(x.get('Date'), "%d/%m/%Y %H:%M"),
+                        reverse=True
+                    )
+                    last_row = sorted_rows[0]
+                    try:
+                        current_balance = float(str(last_row.get('balance', '0')).replace(',', ''))
+                    except (ValueError, TypeError):
+                        current_balance = get_binance_usdt_balance()
+                        logger.warning(f"Invalid balance in last row, using Binance balance: ${current_balance:.1f}")
+                else:
+                    current_balance = get_binance_usdt_balance()
+                    logger.warning(f"No valid dated rows found, using Binance balance: ${current_balance:.1f}")
+            except Exception as e:
                 current_balance = get_binance_usdt_balance()
+                logger.warning(f"Error processing last row: {e}, using Binance balance: ${current_balance:.1f}")
             
             active_trades = count_active_trades(all_rows)
             logger.info(f"Initializing from existing data - Balance: ${current_balance:.1f}, Active trades: {active_trades}")
