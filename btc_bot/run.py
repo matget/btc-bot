@@ -89,30 +89,51 @@ reply_keyboard = ReplyKeyboardMarkup(
 )
 
 def load_config():
-    """Load configuration from environment variables"""
+    """Load configuration from environment variables or Home Assistant addon config"""
     try:
-        # Load environment variables from .env file
-        load_dotenv()
+        # First try to load from .env file
+        try:
+            load_dotenv()
+            logger.info("Loaded configuration from .env file")
+        except Exception as e:
+            logger.info("No .env file found or error loading it, will try environment variables directly")
         
         # Create options dictionary from environment variables
         options = {
-            "TOKEN": os.getenv("TOKEN"),
-            "CHAT_ID": os.getenv("CHAT_ID"),
-            "GSHEET_URL": os.getenv("GSHEET_URL"),
-            "JSON_KEYS": os.getenv("JSON_KEYS"),
+            "TOKEN": os.getenv("TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN"),  # Support both naming conventions
+            "CHAT_ID": os.getenv("CHAT_ID") or os.getenv("TELEGRAM_CHAT_ID"),
+            "GSHEET_URL": os.getenv("GSHEET_URL") or os.getenv("GOOGLE_SHEET_URL"),
+            "JSON_KEYS": os.getenv("JSON_KEYS") or os.getenv("GOOGLE_JSON_KEYS"),
             "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
             "BINANCE_API_KEY": os.getenv("BINANCE_API_KEY"),
             "BINANCE_API_SECRET": os.getenv("BINANCE_API_SECRET")
         }
         
-        # Validate required fields
-        required_fields = ["TOKEN", "CHAT_ID", "GSHEET_URL", "JSON_KEYS", "OPENAI_API_KEY", "BINANCE_API_KEY", "BINANCE_API_SECRET"]
-        missing_fields = [field for field in required_fields if not options.get(field)]
+        # Check which variables are missing
+        missing_fields = [field for field, value in options.items() if not value]
         
         if missing_fields:
-            error_msg = f"Missing required environment variables: {', '.join(missing_fields)}\n"
-            error_msg += "Please make sure these variables are set in your .env file"
+            error_msg = (
+                f"Missing required environment variables: {', '.join(missing_fields)}\n"
+                "Please make sure these variables are set either:\n"
+                "1. In your .env file\n"
+                "2. In your Home Assistant addon configuration\n"
+                "3. Directly as environment variables"
+            )
+            logger.error(error_msg)
+            
+            # If running in Home Assistant (check for typical HA environment variables)
+            if os.getenv('SUPERVISOR_TOKEN') or os.getenv('HASSIO_TOKEN'):
+                error_msg += "\nRunning in Home Assistant - Please configure these in the addon configuration"
+            
             raise ValueError(error_msg)
+            
+        # Log successful configuration (masking sensitive data)
+        masked_config = {
+            k: v[:4] + "..." + v[-4:] if v and len(v) > 8 else "***" 
+            for k, v in options.items()
+        }
+        logger.info(f"Configuration loaded successfully: {masked_config}")
             
         return options
         
