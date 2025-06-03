@@ -8,4 +8,5 @@ openai==1.1.0
 python-binance==1.0.19
 cryptography==45.0.2
 pandas==2.1.1
-pandas-ta==0.11.0
+pandas-ta==0.3.14b0
+python-dotenv==1.0.0
