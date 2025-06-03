@@ -1,0 +1,65 @@
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Data
+data/
+credentials/
+*.json
+!example.config.json
+
+# Docker
+.docker/
+
+# ❌ Sensitive credentials
+btc-bot-keys.json
+
+# 🐳 Docker build artifacts
+*.env
+.env
+*.db
+
+# 🧪 Test artifacts
+.coverage
+pytest_cache/
+
+# 🖥️ macOS system files
+.DS_Store
